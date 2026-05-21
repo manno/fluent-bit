@@ -1,0 +1,77 @@
+name: Build SUSE Image
+
+on:
+  push:
+    branches: [rancher-main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [production, debug]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Login to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags
+        id: tags
+        run: |
+          set -euo pipefail
+          SUFFIX=""
+          if [ "${{ matrix.target }}" = "debug" ]; then
+            SUFFIX="-debug"
+          fi
+
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+            TAGS="${{ env.REGISTRY }}/${{ github.repository }}:${VERSION}-suse1${SUFFIX}"
+            if [ "${{ matrix.target }}" = "production" ]; then
+              TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}:latest"
+            else
+              TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}:latest-debug"
+            fi
+          else
+            TAGS="${{ env.REGISTRY }}/${{ github.repository }}:dev-$(git rev-parse --short HEAD)${SUFFIX}"
+          fi
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+
+      - name: Build ${{ matrix.target }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.suse
+          target: ${{ matrix.target }}
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.tags.outputs.tags }}
+          push: ${{ github.event_name != 'pull_request' }}
+          # PRs build but don't push; docker/build-push-action handles the load/push branching
+          cache-from: type=gha,scope=fluent-bit-${{ matrix.target }}
+          cache-to: type=gha,mode=max,scope=fluent-bit-${{ matrix.target }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.vendor=SUSE Rancher

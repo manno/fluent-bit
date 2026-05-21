@@ -1,0 +1,112 @@
+# Fluent Bit — SUSE rebuild
+# Multi-stage build:
+#   builder    → bci-base (has dev tools, zypper)
+#   production → bci-minimal (small runtime, zypper for runtime libs)
+#   debug      → bci-base (full toolset for in-pod debugging)
+#
+# Both bci-base and bci-minimal digests are tracked by .github/workflows/auto-update-bci.yaml
+
+ARG RELEASE_VERSION=3.1.8
+
+FROM registry.suse.com/bci/bci-base:latest AS builder
+ARG RELEASE_VERSION
+
+# Build dependencies. Names follow SUSE/openSUSE conventions.
+RUN zypper -n install --no-recommends \
+        gcc gcc-c++ make tar git curl ca-certificates \
+        cmake pkg-config flex bison \
+        libopenssl-3-devel cyrus-sasl-devel systemd-devel \
+        zlib-devel libyaml-devel postgresql-server-devel \
+    && zypper -n clean
+
+WORKDIR /src/fluent-bit/
+COPY . ./
+
+WORKDIR /src/fluent-bit/build/
+RUN cmake -DFLB_RELEASE=On \
+        -DFLB_JEMALLOC=On \
+        -DFLB_TLS=On \
+        -DFLB_SHARED_LIB=Off \
+        -DFLB_EXAMPLES=Off \
+        -DFLB_HTTP_SERVER=On \
+        -DFLB_IN_EXEC=Off \
+        -DFLB_IN_SYSTEMD=On \
+        -DFLB_OUT_KAFKA=On \
+        -DFLB_OUT_PGSQL=On \
+        -DFLB_LOG_NO_CONTROL_CHARS=On \
+        .. && \
+    make -j "$(getconf _NPROCESSORS_ONLN)" && \
+    mkdir -p /fluent-bit/bin /fluent-bit/etc /fluent-bit/log && \
+    install bin/fluent-bit /fluent-bit/bin/
+
+WORKDIR /src/fluent-bit/
+RUN cp conf/fluent-bit.conf \
+       conf/parsers.conf \
+       conf/parsers_ambassador.conf \
+       conf/parsers_java.conf \
+       conf/parsers_extra.conf \
+       conf/parsers_openstack.conf \
+       conf/parsers_cinder.conf \
+       conf/plugins.conf \
+       /fluent-bit/etc/ && \
+    /fluent-bit/bin/fluent-bit -J > /fluent-bit/etc/schema.json
+
+# ---------------------------------------------------------------------------
+# Production: small runtime image
+# ---------------------------------------------------------------------------
+FROM registry.suse.com/bci/bci-minimal:latest AS production
+ARG RELEASE_VERSION
+ENV FLUENT_BIT_VERSION=${RELEASE_VERSION}
+
+LABEL org.opencontainers.image.title="Fluent Bit" \
+      org.opencontainers.image.description="Fluent Bit (SUSE rebuild for rancher-logging)" \
+      org.opencontainers.image.version="${RELEASE_VERSION}-suse1" \
+      org.opencontainers.image.vendor="SUSE Rancher" \
+      org.opencontainers.image.source="https://github.com/manno/fluent-bit" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
+# bci-minimal ships with zypper for runtime package installation
+RUN zypper -n install --no-recommends \
+        libopenssl3 cyrus-sasl libsystemd0 libz1 libyaml-0-2 \
+        libpq5 ca-certificates \
+    && zypper -n clean
+
+COPY --from=builder /fluent-bit /fluent-bit
+
+EXPOSE 2020
+
+ENTRYPOINT ["/fluent-bit/bin/fluent-bit"]
+CMD ["-c", "/fluent-bit/etc/fluent-bit.conf"]
+
+# ---------------------------------------------------------------------------
+# Debug: full toolchain + runtime libs for in-pod debugging
+# Tag suffix: -debug. Referenced by rancher-logging chart as `images.fluentbit_debug`.
+# ---------------------------------------------------------------------------
+FROM registry.suse.com/bci/bci-base:latest AS debug
+ARG RELEASE_VERSION
+ENV FLUENT_BIT_VERSION=${RELEASE_VERSION}-debug
+
+LABEL org.opencontainers.image.title="Fluent Bit Debug" \
+      org.opencontainers.image.description="Fluent Bit debug variant (SUSE rebuild)" \
+      org.opencontainers.image.version="${RELEASE_VERSION}-suse1-debug" \
+      org.opencontainers.image.vendor="SUSE Rancher" \
+      org.opencontainers.image.source="https://github.com/manno/fluent-bit" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
+# Runtime libs + diagnostic toolset
+RUN zypper -n install --no-recommends \
+        libopenssl3 cyrus-sasl libsystemd0 libz1 libyaml-0-2 libpq5 ca-certificates \
+        bash gdb valgrind strace ltrace \
+        git vim less jq tmux \
+        bind-utils iputils tcpdump curl iproute2 net-tools mtr \
+        openssl htop sysstat \
+        cmake make tar flex bison gcc gcc-c++ \
+        libopenssl-3-devel cyrus-sasl-devel systemd-devel zlib-devel libyaml-devel \
+    && zypper -n clean
+
+COPY --from=builder /fluent-bit /fluent-bit
+
+EXPOSE 2020
+
+# No ENTRYPOINT — exec into for debugging. CMD runs fluent-bit by default.
+CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
