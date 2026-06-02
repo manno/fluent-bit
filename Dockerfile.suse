@@ -1,10 +1,10 @@
 # Fluent Bit — SUSE rebuild
 # Multi-stage build:
 #   builder    → bci-base (has dev tools, zypper)
-#   production → bci-minimal (small runtime, zypper for runtime libs)
+#   production → bci-base (zypper for runtime libs)
 #   debug      → bci-base (full toolset for in-pod debugging)
 #
-# Both bci-base and bci-minimal digests are tracked by .github/workflows/auto-update-bci.yaml
+# bci-base digest is tracked by .github/workflows/auto-update-bci.yaml
 
 ARG RELEASE_VERSION=3.1.8
 
@@ -52,9 +52,9 @@ RUN cp conf/fluent-bit.conf \
     /fluent-bit/bin/fluent-bit -J > /fluent-bit/etc/schema.json
 
 # ---------------------------------------------------------------------------
-# Production: small runtime image
+# Production: runtime image
 # ---------------------------------------------------------------------------
-FROM registry.suse.com/bci/bci-minimal:latest AS production
+FROM registry.suse.com/bci/bci-base:latest AS production
 ARG RELEASE_VERSION
 ENV FLUENT_BIT_VERSION=${RELEASE_VERSION}
 
@@ -65,7 +65,6 @@ LABEL org.opencontainers.image.title="Fluent Bit" \
       org.opencontainers.image.source="https://github.com/manno/fluent-bit" \
       org.opencontainers.image.licenses="Apache-2.0"
 
-# bci-minimal ships with zypper for runtime package installation
 RUN zypper -n install --no-recommends \
         libopenssl3 cyrus-sasl libsystemd0 libz1 libyaml-0-2 \
         libpq5 ca-certificates \
