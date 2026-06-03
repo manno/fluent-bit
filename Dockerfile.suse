@@ -12,9 +12,10 @@ FROM registry.suse.com/bci/bci-base:latest AS builder
 ARG RELEASE_VERSION
 
 # Build dependencies. Names follow SUSE/openSUSE conventions.
+# gawk is needed by the bundled backtrace subproject's autoconf.
 RUN zypper -n install --no-recommends \
         gcc gcc-c++ make tar git curl ca-certificates \
-        cmake pkg-config flex bison \
+        cmake pkg-config flex bison gawk \
         libopenssl-3-devel cyrus-sasl-devel systemd-devel \
         zlib-devel libyaml-devel postgresql-server-devel \
     && zypper -n clean
