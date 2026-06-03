@@ -2,7 +2,6 @@
 # Multi-stage build:
 #   builder    → bci-base (has dev tools, zypper)
 #   production → bci-base (zypper for runtime libs)
-#   debug      → bci-base (full toolset for in-pod debugging)
 #
 # bci-base digest is tracked by .github/workflows/auto-update-bci.yaml
 
@@ -77,36 +76,3 @@ EXPOSE 2020
 
 ENTRYPOINT ["/fluent-bit/bin/fluent-bit"]
 CMD ["-c", "/fluent-bit/etc/fluent-bit.conf"]
-
-# ---------------------------------------------------------------------------
-# Debug: full toolchain + runtime libs for in-pod debugging
-# Tag suffix: -debug. Referenced by rancher-logging chart as `images.fluentbit_debug`.
-# ---------------------------------------------------------------------------
-FROM registry.suse.com/bci/bci-base:latest AS debug
-ARG RELEASE_VERSION
-ENV FLUENT_BIT_VERSION=${RELEASE_VERSION}-debug
-
-LABEL org.opencontainers.image.title="Fluent Bit Debug" \
-      org.opencontainers.image.description="Fluent Bit debug variant (SUSE rebuild)" \
-      org.opencontainers.image.version="${RELEASE_VERSION}-suse1-debug" \
-      org.opencontainers.image.vendor="SUSE Rancher" \
-      org.opencontainers.image.source="https://github.com/manno/fluent-bit" \
-      org.opencontainers.image.licenses="Apache-2.0"
-
-# Runtime libs + diagnostic toolset
-RUN zypper -n install --no-recommends \
-        libopenssl3 cyrus-sasl libsystemd0 libz1 libyaml-0-2 libpq5 ca-certificates \
-        bash gdb valgrind strace ltrace \
-        git vim less jq tmux \
-        bind-utils iputils tcpdump curl iproute2 net-tools mtr \
-        openssl htop sysstat \
-        cmake make tar flex bison gcc gcc-c++ \
-        libopenssl-3-devel cyrus-sasl-devel systemd-devel zlib-devel libyaml-devel \
-    && zypper -n clean
-
-COPY --from=builder /fluent-bit /fluent-bit
-
-EXPOSE 2020
-
-# No ENTRYPOINT — exec into for debugging. CMD runs fluent-bit by default.
-CMD ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]

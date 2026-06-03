@@ -17,10 +17,6 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        target: [production, debug]
     steps:
       - uses: actions/checkout@v6
         with:
@@ -41,36 +37,27 @@ jobs:
         id: tags
         run: |
           set -euo pipefail
-          SUFFIX=""
-          if [ "${{ matrix.target }}" = "debug" ]; then
-            SUFFIX="-debug"
-          fi
-
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
-            TAGS="${{ env.REGISTRY }}/${{ github.repository }}:${VERSION}-suse1${SUFFIX}"
-            if [ "${{ matrix.target }}" = "production" ]; then
-              TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}:latest"
-            else
-              TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}:latest-debug"
-            fi
+            TAGS="${{ env.REGISTRY }}/${{ github.repository }}:${VERSION}-suse1"
+            TAGS="${TAGS},${{ env.REGISTRY }}/${{ github.repository }}:latest"
           else
-            TAGS="${{ env.REGISTRY }}/${{ github.repository }}:dev-$(git rev-parse --short HEAD)${SUFFIX}"
+            TAGS="${{ env.REGISTRY }}/${{ github.repository }}:dev-$(git rev-parse --short HEAD)"
           fi
           echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
 
-      - name: Build ${{ matrix.target }}
+      - name: Build
         uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile.suse
-          target: ${{ matrix.target }}
+          target: production
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.tags.outputs.tags }}
           push: ${{ github.event_name != 'pull_request' }}
           # PRs build but don't push; docker/build-push-action handles the load/push branching
-          cache-from: type=gha,scope=fluent-bit-${{ matrix.target }}
-          cache-to: type=gha,mode=max,scope=fluent-bit-${{ matrix.target }}
+          cache-from: type=gha,scope=fluent-bit
+          cache-to: type=gha,mode=max,scope=fluent-bit
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
