@@ -62,3 +62,14 @@ jobs:
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.vendor=SUSE Rancher
+
+      - name: Dispatch image update to ob-team-charts
+        if: github.ref == 'refs/heads/rancher-main' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.CHARTS_DISPATCH_TOKEN }}
+        run: |
+          TAG="dev-$(git rev-parse --short HEAD)"
+          gh api repos/manno/ob-team-charts/dispatches \
+            -f event_type=image-updated \
+            -f "client_payload[component]=fluent-bit" \
+            -f "client_payload[tag]=${TAG}"
