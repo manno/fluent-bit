@@ -49,7 +49,7 @@ jobs:
               NEEDS_UPDATE=true
               DIFF_LINES="${DIFF_LINES}- **${variant}**: \`${CURRENT}\` → \`${LATEST}\`%0A"
               # Update all FROM lines for this variant, preserving the trailing "AS <stage>" part
-              sed -i -E "s|(FROM registry\\.suse\\.com/bci/${variant})(:latest|@sha256:[a-f0-9]+)?|\\1@${LATEST}|g" Dockerfile.suse
+              sed -i -E "s#(FROM registry\\.suse\\.com/bci/${variant})(:latest|@sha256:[a-f0-9]+)?#\\1@${LATEST}#g" Dockerfile.suse
             fi
           done
 
