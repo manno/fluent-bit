@@ -7,7 +7,7 @@
 
 ARG RELEASE_VERSION=3.1.8
 
-FROM registry.suse.com/bci/bci-base:latest AS builder
+FROM registry.suse.com/bci/bci-base@sha256:29bf09c9e2b25cac3f27967590195bf448b1b5f6773dedc16f214d8e531466eb AS builder
 ARG RELEASE_VERSION
 
 # Build dependencies. Names follow SUSE/openSUSE conventions.
@@ -54,7 +54,7 @@ RUN cp conf/fluent-bit.conf \
 # ---------------------------------------------------------------------------
 # Production: runtime image
 # ---------------------------------------------------------------------------
-FROM registry.suse.com/bci/bci-base:latest AS production
+FROM registry.suse.com/bci/bci-base@sha256:29bf09c9e2b25cac3f27967590195bf448b1b5f6773dedc16f214d8e531466eb AS production
 ARG RELEASE_VERSION
 ENV FLUENT_BIT_VERSION=${RELEASE_VERSION}
 
