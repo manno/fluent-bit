@@ -79,8 +79,12 @@ Built images push to GHCR:
 
 The `rancher-logging` 4.10 chart references this image as `images.fluentbit` and
 `images.fluentbit_debug` in `packages/rancher-logging/4.10/generated-changes/patch/values.yaml.patch`
-(ob-team-charts repo). Once images are stable, that patch will be updated to
-point at `ghcr.io/manno/fluent-bit` instead of the upstream mirror.
+(ob-team-charts repo). The dispatch pipeline is operational: each push to
+`rancher-main` posts an `image-updated` event to `manno/ob-team-charts`, which
+auto-updates the patch and opens a PR. Current rendered chart: `4.10.0-rancher.30-suse1`.
+
+`CHARTS_DISPATCH_TOKEN` must be set as a repo secret — a fine-grained PAT with
+**Contents: write** on `manno/ob-team-charts`.
 
 ## Windows note
 
